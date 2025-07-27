@@ -1,0 +1,78 @@
+version: '3.8'
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: chatflow-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: chatflow
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - chatflow-network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: chatflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - chatflow-network
+
+  # Kafka for message queuing
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: chatflow-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - chatflow-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: chatflow-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - chatflow-network
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: chatflow-api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - CHAT_SERVICE_URL=http://chat-service:3002
+      - MEDIA_SERVICE_URL=http://media-service:3003
+    volumes:
+      - ./api-gateway:/app
+      - /app/node_modules
+    networks:
+      - chatflow-network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  chatflow-network:
+    driver: bridge
